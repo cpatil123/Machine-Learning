@@ -1,0 +1,180 @@
+---
+title: "Machine Learning Project"
+author: "Channaveer Patil"
+date: "4/14/2020"
+output: html_document
+---
+
+<p style="font-family: times, serif; font-size:11pt; font-style:italic">
+# Summary:
+This report is to summarize Practical Machine Learning Module Project work. Weight lifting data set is considered. This work tries to predict the way participants did exercise. Detailed description is provided for the prediction model that is developed, usage of cross validation, discuss sample error. Explain choices made, finally use model to predict results of 20 test cases. 
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+# Acknowledgement:
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+# Data Provided:
+
+Two worksheets: 
+pml-training.csv	and 	pml-testing.csv
+
+The subjects were tracked during weightlifting exercises, and sensors were located in their arms, forearms, and belt areas, and a sensor was also positioned in the dumbbells. Several three-dimensional measurements were taken while the participants did dumbbell biceps curls, in five different fashions (classes):
+
+•	Classe A: exactly according to the specification.
+
+•	Classe B: throwing the elbows to the front.
+
+•	Classe C: lifting the dumbbell only halfway.
+
+•	Classe D: lowering the dumbbell only halfway.
+
+•	Classe E: throwing the hips to the front.
+
+Model will be built based on training data (pml-training.csv) and tested on testing data (pml-testing.csv)
+
+On a cursory review we know The training data from our set contains 19622 observations of 160 variables. 
+
+# Required packages and libraries:
+
+install.packages("kableExtra")  - One time
+
+install.packages("caret")       - One time
+
+install.packages("rattle")      - One time
+
+install.packages("rpart")       - One time
+
+```{r}
+library(kableExtra); # data formatting and clean presentation
+library(caret);
+library(rattle);
+library(rpart);
+```
+
+# Loading given data
+```{r}
+training <- read.csv("c:\\pml-training.csv", header = TRUE)
+testing <- read.csv("c:\\pml-testing.csv", header = TRUE)
+```
+# Cursory review of data structure
+# Training - 19622 observations of 160 variables
+# Testing - 20 observations of 160 variables
+
+# head(training) - avoiding execution to minimize report length 
+# Many NAs, few initial columns with non vital for prediction 
+
+#Formatting User and Classe Table 
+```{r}
+t1 <- table(training$user_name, training$classe)
+kable(t1, caption = "Users-Classe") %>%
+kable_styling(bootstrap_options = "striped", full_width = FALSE, latex_options = "hold_position")
+```
+# Identify and Remove predictors with near zero variance
+```{r}
+nzv <- nearZeroVar(training)
+training <- training[, -nzv] 
+```
+# 160 variables reduced to 100
+#
+# Remove variables with mostly NA values say > 90%
+```{r}
+isNA <- sapply(training, function(x) mean(is.na(x))) > 0.90
+training <- training[, isNA == FALSE]
+```
+# 100 variables reduced to 59
+#
+# Remove identifier Variables - no vital for prediction
+```{r}
+training <- training[, -(1:5)]
+```
+# 59 variables reduced to 54
+#
+# Create validation set
+```{r}
+set.seed(123)
+inTrain  <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+trainSet <- training[inTrain, ]
+valSet <- training[-inTrain, ]
+dim(trainSet); dim(valSet)
+```
+#
+# Regression Trees model
+```{r}
+set.seed(223)
+ModelTree <- rpart(classe ~ ., data = trainSet, method = "class")
+fancyRpartPlot(ModelTree)
+```
+# ModelTree # get text version
+# Classe summary table
+```{r}
+predTree <- predict(ModelTree, newdata = valSet, type = "class")
+confTree <- confusionMatrix(predTree, valSet$classe)
+tree_overall <- as.data.frame(confTree$overall)
+names(tree_overall) <- c("Value")
+
+kable(tree_overall, caption = "Overall Statistics") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE, latex_options = "hold_position")
+```
+# Plotting decission tree
+```{r}
+plot(confTree$table, col = confTree$byClass, main = paste("Decision Tree - Accuracy =", round(confTree$overall["Accuracy"], 4)))
+```
+# Decision Tree Accuracy = 0.8274
+#
+# Random Forests model and predictions
+```{r}
+set.seed(323)
+tControl <- trainControl(method="cv", number=3, verboseIter=FALSE)
+ModelRF <- train(classe ~ ., data=trainSet, method="rf", trControl = tControl)
+```
+# Predicting
+```{r}
+predRF <- predict(ModelRF, newdata = valSet)
+confRF <- confusionMatrix(predRF, valSet$classe)
+RF_overall <- as.data.frame(confRF$overall)
+names(RF_overall) <- c("Value")
+
+kable(RF_overall, caption = "Overall Statistics") %>%
+kable_styling(bootstrap_options = "striped", full_width = FALSE, latex_options = "hold_position")
+```
+# Plotting decission tree
+```{r}
+plot(confRF$table, col = confRF$byClass, 
+main = paste("Random Forests - Accuracy =",
+round(confRF$overall["Accuracy"], 4)))
+```
+#	Boosting model and predictions
+```{r}
+set.seed(423)
+bControl <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+ModelGBM <- train(classe ~ ., data=trainSet, method="gbm",
+                  trControl = tControl, verbose = FALSE)
+```
+# Predicting
+```{r}
+predGBM <- predict(ModelGBM, newdata = valSet)
+confGBM <- confusionMatrix(predGBM, valSet$classe)
+GBM_overall <- as.data.frame(confGBM$overall)
+names(GBM_overall) <- c("Value")
+
+kable(GBM_overall, caption = "Overall Statistics") %>%
+kable_styling(bootstrap_options = "striped", full_width = FALSE, 
+latex_options = "hold_position")
+```
+# Plotting decission tree
+```{r}
+plot(confGBM$table, col = confGBM$byClass, main = paste("Boosting - Accuracy =",
+round(confGBM$overall["Accuracy"], 4)))
+```
+# Model Comparison
+```{r}
+Accuracy <- data.frame(Model = c("Regression Trees","Random Forests", 
+"Boosting"), Accuracy = c(round(confTree$overall["Accuracy"], 4), 
+round(confRF$overall["Accuracy"], 4), round(confGBM$overall["Accuracy"], 4)))
+
+kable(Accuracy, caption = "Models' accuracy") %>%
+kable_styling(bootstrap_options = "striped", full_width = FALSE, 
+latex_options = "hold_position")
+```
+</p>
